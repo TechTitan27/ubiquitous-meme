@@ -59,30 +59,17 @@ const clientstart = async () => {
 
   const sock = makeWASocket({
     logger: pino({ level: "silent" }),
-    printQRInTerminal: false,
+    printQRInTerminal: false, // no terminal input
     auth: state,
     version,
     browser: randomBrowser
   });
 
-  // ✅ AUTO PAIRING FOR RENDER (NO INPUT)
-  if (!sock.authState.creds.registered) {
-    const phoneNumber = config().botNumber;
-
-    if (!phoneNumber) {
-      console.log(chalk.red("❌ botNumber missing in config"));
-      process.exit(1);
-    }
-
-    const code = await sock.requestPairingCode(phoneNumber);
-    console.log(chalk.green("🔗 Pairing Code: " + chalk.bold.green(code)));
-  }
-
   store.bind(sock.ev);
-
   sock.ev.on('creds.update', saveCreds);
 
-  sock.ev.on('connection.update', (update) => {
+  // CONNECTION EVENTS
+  sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect } = update;
 
     if (connection === 'connecting') {
@@ -92,8 +79,24 @@ const clientstart = async () => {
     if (connection === 'open') {
       console.log(chalk.green('✅ Connected to WhatsApp successfully!'));
 
-      const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+      // AUTO PAIRING FOR RENDER
+      if (!sock.authState.creds.registered) {
+        const phoneNumber = config().botNumber;
+        if (!phoneNumber) {
+          console.log(chalk.red("❌ botNumber missing in config"));
+          process.exit(1);
+        }
 
+        try {
+          const code = await sock.requestPairingCode(phoneNumber);
+          console.log(chalk.green("🔗 Pairing Code: " + chalk.bold.green(code)));
+        } catch (err) {
+          console.log(chalk.red("❌ Failed to request pairing code:"), err);
+        }
+      }
+
+      // Notify owner that bot is online
+      const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
       sock.sendMessage(botJid, {
         text:
           `👑 *${config().settings.title}* is Online!\n\n` +
@@ -105,11 +108,8 @@ const clientstart = async () => {
     }
 
     if (connection === 'close') {
-      const shouldReconnect =
-        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-
+      const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
       console.log(chalk.red('❌ Connection closed'));
-
       if (shouldReconnect) {
         console.log(chalk.yellow('🔄 Reconnecting...'));
         setTimeout(clientstart, 5000);
@@ -117,6 +117,7 @@ const clientstart = async () => {
     }
   });
 
+  // MESSAGE HANDLER
   sock.ev.on('messages.upsert', async (chatUpdate) => {
     try {
       const mek = chatUpdate.messages[0];
@@ -136,6 +137,7 @@ const clientstart = async () => {
     }
   });
 
+  // OTHER UTILITIES
   sock.decodeJid = (jid) => {
     if (!jid) return jid;
     if (/:\d+@/gi.test(jid)) {
@@ -167,10 +169,12 @@ const clientstart = async () => {
 
 clientstart();
 
+// HANDLE UNHANDLED REJECTIONS
 process.on('unhandledRejection', (reason) => {
   console.log('Unhandled Rejection:', reason);
 });
 
+// AUTO-RELOAD ON CHANGE
 let file = require.resolve(__filename);
 fs.watchFile(file, () => {
   delete require.cache[file];

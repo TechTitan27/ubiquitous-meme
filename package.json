@@ -1,5 +1,5 @@
 {
-    "name": "Boye-otoo-md",
+    "name": "boye-otoo-md",
     "version": "1.2",
     "description": "text",
     "main": "index.js",
@@ -7,7 +7,7 @@
     "scripts": {
         "start": "node index.js"
     },
-    "author": "Doy Tech Inc",
+    "author": "doy Tech Inc",
     "license": "MIT",
     "dependencies": {
         "@adiwajshing/keyed-db": "^0.2.4",
